@@ -171,6 +171,72 @@ func TestLifecycle_PersisteTransiciones(t *testing.T) {
 	}
 }
 
+func TestBorrarPII_AnonimizaSoloDelTenant(t *testing.T) {
+	db := openDB(t)
+	defer db.Close()
+	ctx := context.Background()
+	tenantA, tenantB := uuid.New(), uuid.New()
+	tel := "PII-" + uuid.NewString() // teléfono único para no colisionar con otros datos
+
+	connA := tenantConn(t, db, tenantA)
+	defer connA.Close()
+	repoA := persistence.NewPgTicketRepository(connA)
+
+	var idsA []uuid.UUID
+	for i := 0; i < 2; i++ {
+		sol, _ := valueobject.NewSolicitante("Ana", tel)
+		tk, _ := model.NewTicket(tenantA, valueobject.ChannelWhatsApp, sol, "x", valueobject.PriorityMedia)
+		if err := repoA.Save(ctx, tk); err != nil {
+			t.Fatalf("save A: %v", err)
+		}
+		idsA = append(idsA, tk.ID())
+	}
+
+	connB := tenantConn(t, db, tenantB)
+	defer connB.Close()
+	repoB := persistence.NewPgTicketRepository(connB)
+	solB, _ := valueobject.NewSolicitante("Otro", tel)
+	tkB, _ := model.NewTicket(tenantB, valueobject.ChannelWhatsApp, solB, "y", valueobject.PriorityMedia)
+	if err := repoB.Save(ctx, tkB); err != nil {
+		t.Fatalf("save B: %v", err)
+	}
+	t.Cleanup(func() {
+		for _, id := range idsA {
+			_, _ = connA.ExecContext(ctx, "DELETE FROM tickets WHERE id=$1", id)
+		}
+		_, _ = connB.ExecContext(ctx, "DELETE FROM tickets WHERE id=$1", tkB.ID())
+	})
+
+	// Borrar PII bajo tenant A.
+	n, err := repoA.AnonimizarSolicitante(ctx, tel)
+	if err != nil {
+		t.Fatalf("anonimizar: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("esperaba 2 tickets afectados en tenant A, got %d", n)
+	}
+
+	// A: sus tickets quedaron anónimos.
+	for _, id := range idsA {
+		got, err := repoA.FindByID(ctx, id)
+		if err != nil {
+			t.Fatalf("find A: %v", err)
+		}
+		if !got.Solicitante().EsAnonimo() {
+			t.Fatal("el ticket de A debió quedar anonimizado")
+		}
+	}
+
+	// B: su ticket con el MISMO teléfono NO fue tocado (RLS acotó el UPDATE al tenant A).
+	gotB, err := repoB.FindByID(ctx, tkB.ID())
+	if err != nil {
+		t.Fatalf("find B: %v", err)
+	}
+	if gotB.Solicitante().EsAnonimo() {
+		t.Fatal("RLS: el ticket de tenant B NO debió anonimizarse")
+	}
+}
+
 func TestRLS_InsertCrossTenantRechazado(t *testing.T) {
 	db := openDB(t)
 	defer db.Close()

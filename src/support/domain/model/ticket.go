@@ -125,6 +125,17 @@ func (t *Ticket) Cerrar() error {
 	return nil
 }
 
+// AnonimizarSolicitante borra la PII del solicitante (derecho de supresión, Ley 25.326).
+// El ticket sobrevive; el contacto se reemplaza por el tombstone. Idempotente.
+func (t *Ticket) AnonimizarSolicitante() {
+	if t.solicitante.EsAnonimo() {
+		return
+	}
+	t.solicitante = valueobject.Anonimo()
+	t.updatedAt = time.Now().UTC()
+	t.record(event.NewSolicitantePIIBorrada(t.id))
+}
+
 func (t *Ticket) transition(to Status) {
 	from := t.estado
 	t.estado = to

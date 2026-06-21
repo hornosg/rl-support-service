@@ -28,6 +28,17 @@ type TransitionTicketRequest struct {
 	Accion string `json:"accion" binding:"required,oneof=tomar resolver cerrar"`
 }
 
+// BorrarPIIRequest — solicitud de supresión de PII del solicitante (Ley 25.326).
+// El teléfono identifica al cliente final cuya PII se anonimiza en los tickets del tenant.
+type BorrarPIIRequest struct {
+	Telefono string `json:"telefono" binding:"required"`
+}
+
+// BorrarPIIResponse — cuántos tickets quedaron anonimizados.
+type BorrarPIIResponse struct {
+	Anonimizados int `json:"anonimizados"`
+}
+
 // ListTicketsQuery — filtros de listado (query params).
 type ListTicketsQuery struct {
 	Estado    string

@@ -39,6 +39,26 @@ func (h *TicketHandler) Register(rg *gin.RouterGroup) {
 	rg.GET("/tickets/:id", h.Get)
 	rg.POST("/tickets/:id/asignar", h.Assign)
 	rg.POST("/tickets/:id/transicionar", h.Transition)
+	rg.POST("/solicitantes/borrar-pii", h.BorrarPII)
+}
+
+// BorrarPII anonimiza la PII del solicitante (Ley 25.326) en los tickets del tenant.
+func (h *TicketHandler) BorrarPII(c *gin.Context) {
+	repo, _, ok := h.deps(c)
+	if !ok {
+		return
+	}
+	var req dto.BorrarPIIRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		problem.Write(c, http.StatusBadRequest, "body inválido", err.Error())
+		return
+	}
+	resp, err := usecase.NewBorrarPIISolicitante(repo).Execute(c.Request.Context(), req)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *TicketHandler) Create(c *gin.Context) {

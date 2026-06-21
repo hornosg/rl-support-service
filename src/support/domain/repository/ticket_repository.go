@@ -27,4 +27,7 @@ type TicketRepository interface {
 	Save(ctx context.Context, t *model.Ticket) error
 	FindByID(ctx context.Context, id uuid.UUID) (*model.Ticket, error)
 	Find(ctx context.Context, c Criteria) ([]*model.Ticket, error)
+	// AnonimizarSolicitante borra la PII (tombstone) de todos los tickets del tenant
+	// cuyo solicitante tenga ese teléfono. Devuelve cuántos tickets afectó.
+	AnonimizarSolicitante(ctx context.Context, telefono string) (int, error)
 }

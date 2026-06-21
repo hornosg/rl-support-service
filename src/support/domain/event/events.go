@@ -57,3 +57,16 @@ func NewTicketTransicionado(ticketID uuid.UUID, de, a string) TicketTransicionad
 }
 
 func (TicketTransicionado) Name() string { return "ticket.transicionado" }
+
+// SolicitantePIIBorrada — se anonimizó la PII del solicitante de un ticket (Ley 25.326).
+// No lleva PII: solo el id del ticket.
+type SolicitantePIIBorrada struct {
+	base
+	TicketID uuid.UUID
+}
+
+func NewSolicitantePIIBorrada(ticketID uuid.UUID) SolicitantePIIBorrada {
+	return SolicitantePIIBorrada{base: base{at: time.Now().UTC()}, TicketID: ticketID}
+}
+
+func (SolicitantePIIBorrada) Name() string { return "ticket.solicitante_pii_borrada" }

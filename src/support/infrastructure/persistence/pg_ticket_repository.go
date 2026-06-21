@@ -112,6 +112,21 @@ func (r *PgTicketRepository) Find(ctx context.Context, c repository.Criteria) ([
 	return out, rows.Err()
 }
 
+// AnonimizarSolicitante hace un UPDATE masivo de la PII (tombstone) sobre los tickets
+// del tenant de la sesión (RLS acota el alcance). Devuelve cuántas filas afectó.
+func (r *PgTicketRepository) AnonimizarSolicitante(ctx context.Context, telefono string) (int, error) {
+	res, err := r.exec.ExecContext(ctx, `
+UPDATE tickets
+   SET solicitante_nombre = $1, solicitante_telefono = $1, updated_at = now()
+ WHERE solicitante_telefono = $2`,
+		valueobject.Anonimizado, telefono)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
+}
+
 func scanTicket(s scanner) (*model.Ticket, error) {
 	var (
 		id, tenantID                                  uuid.UUID

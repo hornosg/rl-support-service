@@ -77,6 +77,31 @@ func TestNewTicket_AsuntoVacio(t *testing.T) {
 	}
 }
 
+func TestTicket_AnonimizarSolicitante(t *testing.T) {
+	tk := mother.AbiertoTicket()
+	if tk.Solicitante().EsAnonimo() {
+		t.Fatal("un ticket nuevo no debe estar anonimizado")
+	}
+	_ = tk.PullEvents() // descartar eventos de creación
+
+	tk.AnonimizarSolicitante()
+	if !tk.Solicitante().EsAnonimo() {
+		t.Fatal("tras anonimizar, el solicitante debe estar borrado")
+	}
+	if tk.Solicitante().Nombre() != valueobject.Anonimizado || tk.Solicitante().Telefono() != valueobject.Anonimizado {
+		t.Fatalf("PII no quedó en tombstone: %q / %q", tk.Solicitante().Nombre(), tk.Solicitante().Telefono())
+	}
+	if ev := tk.PullEvents(); len(ev) != 1 {
+		t.Fatalf("esperaba 1 evento SolicitantePIIBorrada, got %d", len(ev))
+	}
+
+	// Idempotente: anonimizar de nuevo no emite evento.
+	tk.AnonimizarSolicitante()
+	if ev := tk.PullEvents(); len(ev) != 0 {
+		t.Fatalf("anonimizar dos veces no debe emitir evento, got %d", len(ev))
+	}
+}
+
 func TestTicket_EmiteEventos(t *testing.T) {
 	tk := mother.AbiertoTicket()
 	_ = tk.Asignar(uuid.New())

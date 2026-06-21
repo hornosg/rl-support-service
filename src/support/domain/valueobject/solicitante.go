@@ -18,6 +18,20 @@ var (
 	ErrTelefonoVacio = errors.New("valueobject: teléfono del solicitante requerido")
 )
 
+// Anonimizado — tombstone que reemplaza la PII tras un borrado (Ley 25.326).
+const Anonimizado = "[borrado]"
+
+// Anonimo construye un solicitante con la PII borrada. Se usa al ejercer el derecho
+// de supresión: el ticket sobrevive (historial/métricas), la PII no.
+func Anonimo() Solicitante {
+	return Solicitante{nombre: Anonimizado, telefono: Anonimizado}
+}
+
+// EsAnonimo indica si la PII del solicitante ya fue borrada.
+func (s Solicitante) EsAnonimo() bool {
+	return s.nombre == Anonimizado && s.telefono == Anonimizado
+}
+
 // NewSolicitante valida y normaliza (trim) los datos de contacto.
 func NewSolicitante(nombre, telefono string) (Solicitante, error) {
 	nombre = strings.TrimSpace(nombre)

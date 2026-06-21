@@ -70,6 +70,35 @@ func TestTransitionTicket_TomarDesdeAsignado(t *testing.T) {
 	}
 }
 
+func TestBorrarPIISolicitante(t *testing.T) {
+	repo := fake.NewTicketRepo()
+	ctx := context.Background()
+	tenant := uuid.New()
+
+	// Dos tickets del mismo solicitante (mismo teléfono) + uno de otro.
+	uc := usecase.NewCreateTicket(repo, &fake.Publisher{})
+	for i := 0; i < 2; i++ {
+		if _, err := uc.Execute(ctx, tenant, dto.CreateTicketRequest{
+			Canal: "whatsapp", SolicitanteNombre: "Ana", SolicitanteTelefono: "+5491111111111", Asunto: "x",
+		}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+	if _, err := uc.Execute(ctx, tenant, dto.CreateTicketRequest{
+		Canal: "whatsapp", SolicitanteNombre: "Beto", SolicitanteTelefono: "+5492222222222", Asunto: "y",
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	resp, err := usecase.NewBorrarPIISolicitante(repo).Execute(ctx, dto.BorrarPIIRequest{Telefono: "+5491111111111"})
+	if err != nil {
+		t.Fatalf("borrar pii: %v", err)
+	}
+	if resp.Anonimizados != 2 {
+		t.Fatalf("esperaba 2 anonimizados, got %d", resp.Anonimizados)
+	}
+}
+
 func TestGetTicket_NotFound(t *testing.T) {
 	_, err := usecase.NewGetTicket(fake.NewTicketRepo()).Execute(context.Background(), uuid.New())
 	if err == nil {

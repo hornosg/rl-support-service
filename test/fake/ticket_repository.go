@@ -53,6 +53,17 @@ func (r *TicketRepo) Find(_ context.Context, c repository.Criteria) ([]*model.Ti
 	return out, nil
 }
 
+func (r *TicketRepo) AnonimizarSolicitante(_ context.Context, telefono string) (int, error) {
+	n := 0
+	for _, t := range r.store {
+		if t.Solicitante().Telefono() == telefono {
+			t.AnonimizarSolicitante()
+			n++
+		}
+	}
+	return n, nil
+}
+
 // Publisher — EventPublisher que solo cuenta los eventos publicados.
 type Publisher struct {
 	Count int
