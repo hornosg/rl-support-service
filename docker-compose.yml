@@ -1,0 +1,82 @@
+version: '3.8'
+
+# support-service — compose para desarrollo aislado sobre el lab compartido (lab-network).
+# Requiere infra corriendo:  make -C ~/Projects infra
+#
+# Devy / RULE-09 (separación control-plane / application-plane):
+#   - postgres-setup actúa como CONTROL PLANE: corre como superusuario, crea la DB,
+#     crea el ROL DE APP SIN DDL, aplica migraciones (DDL) y otorga sólo DML al rol de app.
+#   - support-service (el servicio) corre como APP PLANE: conecta con el rol support_service_app,
+#     que no puede CREATE/DROP nada. Un bug en la app no toca infraestructura.
+
+services:
+  # ── CONTROL PLANE: provisioning idempotente (DB + user sin DDL + migraciones) ──
+  postgres-setup:
+    image: pgvector/pgvector:pg15
+    container_name: support_service_postgres_setup
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?required}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?required}
+    volumes:
+      - ./migrations:/migrations:ro
+    command: >
+      sh -c '
+        set -e
+        H="-h lab-postgres -U ${POSTGRES_USER:-postgres}"
+        echo "› DB support_service" &&
+        psql $$H -tc "SELECT 1 FROM pg_database WHERE datname='"'"'support_service'"'"'" | grep -q 1 \
+          || psql $$H -c "CREATE DATABASE support_service;"
+        echo "› rol de app support_service_app (sin DDL)" &&
+        psql $$H -tc "SELECT 1 FROM pg_roles WHERE rolname='"'"'support_service_app'"'"'" | grep -q 1 \
+          || psql $$H -c "CREATE ROLE support_service_app LOGIN PASSWORD '"'"'$$APP_DB_PASSWORD'"'"' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
+        echo "› migraciones (DDL como control-plane)" &&
+        for f in /migrations/*.sql; do echo "  - $$f"; psql $$H -d support_service -v ON_ERROR_STOP=1 -f "$$f"; done
+        echo "› grants DML al rol de app" &&
+        psql $$H -d support_service -c "GRANT USAGE ON SCHEMA public TO support_service_app;"
+        psql $$H -d support_service -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO support_service_app;"
+        psql $$H -d support_service -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO support_service_app;"
+        psql $$H -d support_service -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO support_service_app;"
+        echo "✓ provisioning listo"
+      '
+    networks:
+      - lab-network
+
+  support-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mc-support-service
+    environment:
+      SERVER_PORT: 8160
+      SERVER_MODE: release
+      MULTITENANT: "true"
+      # App plane: conecta con el rol SIN DDL (RULE-09)
+      DATABASE_HOST: lab-postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: support_service_app
+      DATABASE_PASSWORD: ${APP_DB_PASSWORD:?required}
+      DATABASE_NAME: support_service
+      DATABASE_SSL_MODE: disable
+      # Identidad / tenancy (RULE-04/10). JWT emitido por IAM.
+      JWT_SECRET: ${JWT_SECRET}
+      METRICS_ENABLED: "true"
+    ports:
+      - "8160:8160"
+    depends_on:
+      - postgres-setup
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8160/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "logging=promtail"
+      - "service_name=support-service"
+    networks:
+      - lab-network
+    restart: unless-stopped
+
+networks:
+  lab-network:
+    external: true
