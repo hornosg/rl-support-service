@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"support-service/src/shared/database"
+	"support-service/src/support/infrastructure/http/handler"
 )
 
 func main() {
@@ -52,11 +53,9 @@ func main() {
 		r.Use(database.TenantSession(db, log))
 	}
 
-	// ── Rutas del dominio (montar acá los handlers de src/support_service/...) ──
+	// ── Rutas del dominio de tickets (E03/E04, contrato RULE-06) ──
 	api := r.Group("/api/v1")
-	api.GET("/example", func(c *gin.Context) {
-		c.JSON(200, gin.H{"ok": true, "tenant_scoped": multitenant})
-	})
+	handler.NewTicketHandler(log).Register(api)
 
 	log.Info("starting", zap.String("service", "support-service"), zap.String("port", port))
 	if err := r.Run(":" + port); err != nil {
