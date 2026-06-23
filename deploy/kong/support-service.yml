@@ -1,0 +1,12 @@
+# Aporte de support-service a la config declarativa de Kong del lab.
+# El lab compone este fragmento (decK); NO se edita el kong.yml central (RULE-07).
+_format_version: "3.0"
+
+services:
+  - name: support-service
+    url: http://mc-support-service:8160
+    routes:
+      - name: support-service-route
+        paths:
+          - /support_service
+        strip_path: true

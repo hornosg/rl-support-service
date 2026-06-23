@@ -1,0 +1,7 @@
+# Aporte de support-service al scrape de Prometheus del lab (formato file_sd).
+# El lab lo consume vía file_sd_configs / Docker SD; NO se edita el prometheus.yml central (RULE-07).
+- targets:
+    - mc-support-service:9090
+  labels:
+    service_name: support-service
+    job: support-service

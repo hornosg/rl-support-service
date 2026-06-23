@@ -1,41 +1,66 @@
 # support-service
 
-Bounded context de soporte — dominio de tickets (CRUD + estados), multi-tenant fail-closed
+Servicio de **soporte** de Riotless: dueño del ciclo de vida de los **tickets** (alta, asignación
+y transición de estado), multi-tenant y *fail-closed*. El canal de entrada (WhatsApp hoy; web/email
+a futuro) lo consume por contrato HTTP — no es dueño del dominio.
 
-Servicio Go de la plataforma **Devy**, generado con el golden path (`~/Projects/scaffold/new-service.sh`).
-Hexagonal, integrado a `lab-network`, fail-closed desde el nacimiento.
+- **Stack:** Go + Gin · PostgreSQL con Row-Level Security · arquitectura hexagonal + DDD.
+- **Puerto:** `8160` · métricas en `/metrics` · salud en `/health`.
 
 ## Correr local
 
+Requiere PostgreSQL accesible (la DB `support_service`, su rol de app y las migraciones).
+
 ```bash
-cp .env.example .env      # completar JWT_SECRET
-docker compose up -d      # crea DB + rol de app sin DDL, corre migraciones, levanta el servicio
+cp .env.example .env      # completar JWT_SECRET y la password de la DB
+docker compose up -d      # provisiona DB + rol de app sin DDL, corre migraciones y levanta el servicio
 curl localhost:8160/health
 ```
 
-## Qué trae horneado (Devy)
+## El contrato (resumen)
 
-- **RULE-09 — control/app-plane**: `postgres-setup` (superusuario) crea la DB, el rol `support_service_app`
-  **sin DDL** y aplica migraciones. El servicio corre como `support_service_app`: no puede tocar infra.
-- **RULE-10 — RLS fail-closed**: `migrations/002_rls.sql` activa Row-Level Security. El middleware
-  `database.TenantSession` fija una conexión por request y setea `app.tenant_id` (del header
-  `X-Tenant-ID`, validado contra el JWT). Si un handler olvida filtrar, la DB filtra igual.
-- **Break-glass**: `system_admin` (header `X-User-Role`) accede cross-tenant — queda **auditado** en logs.
-- **TenantValidation** (go-shared) a nivel HTTP + canonical-ish logs (zap) + métricas Prometheus.
+Todos los endpoints de negocio van bajo `/api/v1` y exigen tenant (`X-Tenant-ID`, validado contra el
+JWT). Los errores siguen Problem Details (RFC 7807). Detalle completo en [`api-docs/`](./api-docs/contract.md).
+
+| Verbo | Ruta | Qué |
+|-------|------|-----|
+| POST | `/api/v1/tickets` | Crear ticket (origen: canal) |
+| GET | `/api/v1/tickets` | Listar tickets del tenant (filtros: `estado`, `asignado_a`) |
+| GET | `/api/v1/tickets/:id` | Consultar un ticket |
+| POST | `/api/v1/tickets/:id/asignar` | Asignar a un operador |
+| POST | `/api/v1/tickets/:id/transicionar` | Avanzar estado (`tomar`/`resolver`/`cerrar`) |
+| POST | `/api/v1/solicitantes/borrar-pii` | Anonimizar la PII de un solicitante (Ley 25.326) |
+
+**Ciclo de vida del ticket** (lineal): `abierto → asignado → en_curso → resuelto → cerrado`.
+Toda transición inválida se rechaza.
+
+## Aislamiento multi-tenant (fail-closed)
+
+El aislamiento entre tenants vive en la base, no solo en el código:
+
+- Cada request fija una conexión y setea `app.tenant_id` (del header `X-Tenant-ID`).
+- Las políticas **RLS** de PostgreSQL filtran por ese tenant: si un query olvida filtrar, la base
+  filtra igual. El rol de la aplicación no puede saltar RLS ni ejecutar DDL.
+- **Break-glass**: solo un `system_admin` accede cross-tenant, y queda auditado en los logs.
+- Sin tenant válido, toda operación de negocio se rechaza.
 
 ## Estructura
 
 ```
 src/
-├── main.go                 # composition root
-├── shared/database/        # conexión + TenantSession (RLS)
-└── support_service/              # ← crear el dominio acá: application/ domain/ infrastructure/ ports/
-migrations/                 # 001_init.sql + 002_rls.sql (corren como control-plane)
+├── main.go                      # composition root (router, middlewares, wiring)
+├── shared/database/             # conexión + sesión de tenant (RLS)
+└── support/
+    ├── domain/                  # agregado Ticket, value objects, máquina de estados, eventos, ports
+    ├── application/             # use cases + DTOs
+    └── infrastructure/          # persistencia (Postgres), HTTP (Gin), Problem Details, eventos
+migrations/                      # esquema + RLS (se aplican como control-plane)
+test/                            # object mothers, fakes e integración (build tag `integration`)
 ```
 
-## Próximos pasos
+## Tests
 
-1. Modelar el dominio en `src/support_service/` (hexagonal).
-2. Por cada tabla tenant-scoped nueva, repetir el bloque RLS de `002_rls.sql`.
-3. Registrar la ruta en Kong y el scrape en Prometheus (ver salida del generador, o `--wire`).
-4. Antes de prod: pasar el **production-readiness scorecard** (roadmap E08).
+```bash
+go test ./...                                  # unit (dominio + use cases), sin DB
+go test -tags integration ./test/integration/  # aislamiento RLS y ciclo de vida contra una DB real
+```
