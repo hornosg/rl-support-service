@@ -1,9 +1,8 @@
 version: '3.8'
 
-# support-service — compose para desarrollo aislado sobre el lab compartido (lab-network).
-# Requiere infra corriendo:  make -C ~/Projects infra
+# support-service — compose para desarrollo aislado sobre una red compartida (lab-network).
 #
-# Devy / RULE-09 (separación control-plane / application-plane):
+# Separación control-plane / application-plane:
 #   - postgres-setup actúa como CONTROL PLANE: corre como superusuario, crea la DB,
 #     crea el ROL DE APP SIN DDL, aplica migraciones (DDL) y otorga sólo DML al rol de app.
 #   - support-service (el servicio) corre como APP PLANE: conecta con el rol support_service_app,
@@ -15,8 +14,8 @@ services:
     image: pgvector/pgvector:pg15
     container_name: support_service_postgres_setup
     environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD:?required}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?required}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD requerido}
     volumes:
       - ./migrations:/migrations:ro
     command: >
@@ -50,14 +49,14 @@ services:
       SERVER_PORT: 8160
       SERVER_MODE: release
       MULTITENANT: "true"
-      # App plane: conecta con el rol SIN DDL (RULE-09)
+      # App plane: conecta con el rol SIN DDL
       DATABASE_HOST: lab-postgres
       DATABASE_PORT: 5432
       DATABASE_USER: support_service_app
-      DATABASE_PASSWORD: ${APP_DB_PASSWORD:?required}
+      DATABASE_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD requerido}
       DATABASE_NAME: support_service
       DATABASE_SSL_MODE: disable
-      # Identidad / tenancy (RULE-04/10). JWT emitido por IAM.
+      # Secreto para validar los JWT del servicio de identidad
       JWT_SECRET: ${JWT_SECRET}
       METRICS_ENABLED: "true"
     ports:

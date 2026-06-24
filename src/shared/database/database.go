@@ -1,4 +1,4 @@
-// Package database — conexión a Postgres y sesión de tenant fail-closed (Devy RULE-10).
+// Package database — conexión a Postgres y sesión de tenant fail-closed (RLS).
 package database
 
 import (

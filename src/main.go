@@ -1,7 +1,7 @@
 package main
 
 // support-service — Bounded context de soporte — dominio de tickets (CRUD + estados), multi-tenant fail-closed
-// Servicio Go de la plataforma Devy. Hexagonal; este main es el composition root.
+// Servicio Go. Hexagonal; este main es el composition root.
 
 import (
 	"database/sql"

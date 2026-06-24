@@ -31,7 +31,9 @@ func dsn() string {
 	if v := os.Getenv("TEST_DATABASE_DSN"); v != "" {
 		return v
 	}
-	return "host=localhost port=5432 user=support_service_app password=REDACTED dbname=support_service sslmode=disable"
+	// Sin password embebida: viene de TEST_DATABASE_DSN o de PGPASSWORD/.pgpass.
+	// Sin credenciales, el Ping falla y los tests se saltean.
+	return "host=localhost port=5432 user=support_service_app dbname=support_service sslmode=disable"
 }
 
 func openDB(t *testing.T) *sql.DB {
